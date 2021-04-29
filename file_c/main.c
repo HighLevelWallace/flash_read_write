@@ -46,19 +46,27 @@ void flash_block_erase_64k(int addr)
 void flash_chip_erase()
 {
 	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0xC7, 8, 0, 0);
+	spi_setup_cmd_addr(0x60, 8, 0, 0);
 	spi_set_datalen(0);
 	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
 }
 
 void flash_write_word(int addr, int data)
 {
+        int status1,status2,status3;
+
 	flash_write_enable();
 	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x02, 8, addr, 24);
+        status1=spi_get_status();
+        printf("write status1 is %08x\n",status1);
+	spi_setup_cmd_addr(0x02, 8, ((addr << 8) & 0xFFFFFF00), 32);
 	spi_set_datalen(32);
 	spi_write_fifo(&data, 32);
+        status2=spi_get_status();
+        printf("write status2 is %08x\n",status2);
 	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
+        status3=spi_get_status();
+        printf("write status3 is %08x\n",status3);
 	while (flash_in_progress())
 		;
 	flash_write_disable();
@@ -68,12 +76,18 @@ void flash_write_word(int addr, int data)
 
 void flash_read_word(int addr, int *data)
 {
+        int status1,status2;  
+
 	spi_start_transaction(SPI_CMD_SWRST, SPI_CSN0);
 	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x03, 8, addr, 24);
+	spi_setup_cmd_addr(0x03, 8, ((addr << 8) & 0xFFFFFF00), 32);
 	spi_set_datalen(32);
 	spi_start_transaction(SPI_CMD_RD, SPI_CSN0);
+        status1=spi_get_status();
+        printf("read status1 is %08x\n",status1);
 	spi_read_fifo(data, 32);
+        status2=spi_get_status();
+        printf("read status2 is %08x\n",status2);
 	while (flash_in_progress())
 		;
 }
@@ -158,14 +172,14 @@ int main()
 	uart_send("  \n", 3);
 
 	flash_write_enable();
-	printf("Erasing block 0...\n");
-	flash_block_erase_64k(0);
+	printf("Erasing the whole chip...\n");
+	flash_chip_erase();
 	while (flash_in_progress())
 		;
-	printf("Done erasing block.\n");
+	printf("Done erasing chip.\n");
 
 	printf("Writing 0x12345678 to address 0...\n");
-	flash_write_word(0, 0x12345678);
+	flash_write_word(0x0, 0x12345678);
 	printf("Writing done.\n");
 	flash_read_word(0x0, &rdata);
 	printf("Read: %08x", rdata);
