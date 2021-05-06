@@ -5,16 +5,16 @@
 #include "pulpino.h"
 #include "utils.h"
 #include "spi.h"
+#include "flash.h"
 
 void hex_to_string(char *, unsigned int);
 int str_to_int(const char *);
-int is_hex(char c){ return c <= 'H' && c >= 'A' ||
-					c <= 'h' && c >= 'a' || c <='9' && c >= '0'; }
+int is_hex(char c) { return c <= 'H' && c >= 'A' ||
+							c <= 'h' && c >= 'a' || c <= '9' && c >= '0'; }
 
 const char g_numbers[] = {
-                           '0', '1', '2', '3', '4', '5', '6', '7',
-                           '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
-                         };
+	'0', '1', '2', '3', '4', '5', '6', '7',
+	'8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
 int check_spi_flash();
 
@@ -25,98 +25,12 @@ unsigned char one_count(unsigned int x)
 {
 	unsigned char c = 0;
 	int i = 0;
-	while(x) 
+	while (x)
 	{
 		c += x & 0x1;
 		x >>= 1;
 	}
 	return c;
-}
-
-
-void flash_write_enable()
-{
-	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x06, 8, 0, 0);
-	spi_set_datalen(0);
-	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
-}
-
-void flash_write_disable()
-{
-	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x04, 8, 0, 0);
-	spi_set_datalen(0);
-	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
-}
-
-int flash_in_progress()
-{
-	int sr1 = 0;
-	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x05, 8, 0, 0);
-	spi_set_datalen(8);
-	spi_start_transaction(SPI_CMD_RD, SPI_CSN0);
-	spi_read_fifo(&sr1, 8);
-	return sr1 & 0x1;
-}
-
-void flash_block_erase_64k(int addr)
-{
-	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0xD8, 8, addr, 24);
-	spi_set_datalen(0);
-	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
-}
-
-void flash_chip_erase()
-{
-	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x60, 8, 0, 0);
-	spi_set_datalen(0);
-	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
-}
-
-void flash_write_word(int addr, int data)
-{
-        int status1,status2,status3;
-
-	flash_write_enable();
-	spi_setup_dummy(0, 0);
-        status1=spi_get_status();
-        printf("write status1 is %08x\n",status1);
-	spi_setup_cmd_addr(0x02, 8, ((addr << 8) & 0xFFFFFF00), 24);
-        //spi_setup_cmd_addr(0x02, 8, addr, 24);
-	spi_set_datalen(32);
-	spi_write_fifo(&data, 32);
-        status2=spi_get_status();
-        printf("write status2 is %08x\n",status2);
-	spi_start_transaction(SPI_CMD_WR, SPI_CSN0);
-        status3=spi_get_status();
-        printf("write status3 is %08x\n",status3);
-	while (flash_in_progress());
-	flash_write_disable();
-	while (flash_in_progress());
-        printf("Writing done.\n");
-}
-
-void flash_read_word(int addr, int *data)
-{
-        int status1,status2;  
-
-	spi_start_transaction(SPI_CMD_SWRST, SPI_CSN0);
-	spi_setup_dummy(0, 0);
-	spi_setup_cmd_addr(0x03, 8, ((addr << 8) & 0xFFFFFF00), 24);
-	//spi_setup_cmd_addr(0x03, 8, addr, 24);
-	spi_set_datalen(32);
-	spi_start_transaction(SPI_CMD_RD, SPI_CSN0);
-        status1=spi_get_status();
-        printf("read status1 is %08x\n",status1);
-	spi_read_fifo(data, 32);
-        status2=spi_get_status();
-        printf("read status2 is %08x\n",status2);
-	while (flash_in_progress())
-		;
 }
 
 const char numchar[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
@@ -212,57 +126,58 @@ int main()
         flash_write_word(0x4, 0xabcdef);
 	printf("Writing done.\n");*/
 
-
 	char flashstr[9];
-        unsigned int  flashaddr = 0;
+	unsigned int flashaddr = 0;
 	unsigned int flashdata;
-        unsigned int datanum = 0;
-        printf("waiting for uart signals to write to flash...\n");
+	unsigned int datanum = 0;
+	printf("waiting for uart signals to write to flash...\n");
 	uart_wait_tx_done();
-	while(1)
+	while (1)
 	{
 		int i = 0;
-		while(1)
+		while (1)
 		{
-			if(!is_hex(flashstr[i++] = uart_getchar())) break;
-			if(i >= 20) break;
+			if (!is_hex(flashstr[i++] = uart_getchar()))
+				break;
+			if (i >= 20)
+				break;
 		}
 		flashstr[8] = '\0';
-		if(flashstr[i - 1] == 'q') break;
+		if (flashstr[i - 1] == 'q')
+			break;
 		flashdata = str_to_int(flashstr);
-                datanum = datanum + 0x1;
-                printf("flash data is %08x \n", flashdata);
-                uart_wait_tx_done();
-                flash_write_word(flashaddr,flashdata);
-                uart_wait_tx_done();
-                flashaddr = flashaddr + 0x4;
+		datanum = datanum + 0x1;
+		printf("flash data is %08x \n", flashdata);
+		uart_wait_tx_done();
+		flash_write_word(flashaddr, flashdata);
+		uart_wait_tx_done();
+		flashaddr = flashaddr + 0x4;
 		uart_sendchar(one_count(flashdata));
 	}
 
-        uart_send("Done write data to flash!\n", 26);
+	uart_send("Done write data to flash!\n", 26);
 
 	uart_wait_tx_done();
 
+	uart_send("Loading from flash...\n", 22);
 
-        uart_send("Loading from flash...\n", 22);
+	unsigned int *memaddr = 0;
+	unsigned int readflashaddr = 0;
+	for (int num = 0; num <= datanum; num++)
+	{
+		flash_read_word(readflashaddr, &rdata);
+		*(memaddr++) = rdata;
+		readflashaddr = readflashaddr + 0x4;
+	}
 
-        unsigned int * memaddr = 0;
-        unsigned int  readflashaddr = 0;
-        for(int num=0;num<=datanum;num++)
-        {
-         flash_read_word(readflashaddr, &rdata);
-         *(memaddr++) = rdata;
-         readflashaddr = readflashaddr + 0x4;
-        } 
+	uart_send("Done, jumping to Instruction RAM.\n", 34);
+	uart_wait_tx_done();
 
+	BOOTREG = 0x00;
 
-      uart_send("Done, jumping to Instruction RAM.\n", 34);
-      uart_wait_tx_done();
-
-      BOOTREG = 0x00;
-
-      jump_and_start((volatile int *)(INSTR_RAM_START_ADDR));
-      while(1) printf("This isn't supposed to be shown. \n");
+	jump_and_start((volatile int *)(INSTR_RAM_START_ADDR));
+	while (1)
+		printf("This isn't supposed to be shown. \n");
 
 	return 0;
 }
@@ -286,78 +201,76 @@ void hex_to_string(char *str, unsigned int hex)
 	return;
 }
 
-
-
-
-int str_to_int(const char * str)
+int str_to_int(const char *str)
 {
 	int hex = 0;
-	for(int i = 0; i < 8; ++i)
+	for (int i = 0; i < 8; ++i)
 	{
-		if(str[i] <= '9' && str[i] >= '0')
+		if (str[i] <= '9' && str[i] >= '0')
 			hex |= (int)(str[i] - '0') << 4 * (7 - i);
-		else if(str[i] <= 'F' && str[i] >= 'A')
+		else if (str[i] <= 'F' && str[i] >= 'A')
 			hex |= (int)(str[i] - 'A' + 0xA) << 4 * (7 - i);
-		else if(str[i] <= 'f' && str[i] >= 'a')
+		else if (str[i] <= 'f' && str[i] >= 'a')
 			hex |= (int)(str[i] - 'a' + 0xA) << 4 * (7 - i);
 	}
 	return hex;
 }
 
+int check_spi_flash()
+{
+	int err = 0;
+	int rd_id[2];
 
-int check_spi_flash() {
-  int err = 0;
-  int rd_id[2];
+	// reads flash ID
+	spi_setup_cmd_addr(0x90, 8, 0, 0);
+	spi_set_datalen(64);
+	spi_setup_dummy(0, 0);
+	spi_start_transaction(SPI_CMD_RD, SPI_CSN0);
+	spi_read_fifo(rd_id, 64);
 
-  // reads flash ID
-  spi_setup_cmd_addr(0x90, 8, 0, 0);
-  spi_set_datalen(64);
-  spi_setup_dummy(0, 0);
-  spi_start_transaction(SPI_CMD_RD, SPI_CSN0);
-  spi_read_fifo(rd_id, 64);
+	// id should be 0x0102194D  //EF
+	//if (((rd_id[0] >> 24) & 0xFF) != 0x01)
+	if ((rd_id[0] & 0xFF) != 0xEF)
+		err++;
 
-
-  // id should be 0x0102194D  //EF
-  //if (((rd_id[0] >> 24) & 0xFF) != 0x01)
-    if ((rd_id[0] & 0xFF) != 0xEF)
-    err++;
-
-  // check flash model is 128MB or 256MB 1.8V
-  /*if ( (((rd_id[0] >> 8) & 0xFFFF) != 0x0219) &&
+	// check flash model is 128MB or 256MB 1.8V
+	/*if ( (((rd_id[0] >> 8) & 0xFFFF) != 0x0219) &&
        (((rd_id[0] >> 8) & 0xFFFF) != 0x2018) )
     err++;*/
 
-  return err;
+	return err;
 }
-
 
 void jump_and_start(volatile int *ptr)
 {
 #ifdef __riscv__
-  asm("jalr x0, %0\n"
-      "nop\n"
-      "nop\n"
-      "nop\n"
-      : : "r" (ptr) );
+	asm("jalr x0, %0\n"
+		"nop\n"
+		"nop\n"
+		"nop\n"
+		:
+		: "r"(ptr));
 #else
-  asm("l.jr\t%0\n"
-      "l.nop\n"
-      "l.nop\n"
-      "l.nop\n"
-      : : "r" (ptr) );
+	asm("l.jr\t%0\n"
+		"l.nop\n"
+		"l.nop\n"
+		"l.nop\n"
+		:
+		: "r"(ptr));
 #endif
 }
 
-void uart_send_block_done(unsigned int i) {
-  unsigned int low  = i & 0xF;
-  unsigned int high = i >>  4; // /16
+void uart_send_block_done(unsigned int i)
+{
+	unsigned int low = i & 0xF;
+	unsigned int high = i >> 4; // /16
 
-  uart_send("Block ", 6);
+	uart_send("Block ", 6);
 
-  uart_send(&g_numbers[high], 1);
-  uart_send(&g_numbers[low], 1);
+	uart_send(&g_numbers[high], 1);
+	uart_send(&g_numbers[low], 1);
 
-  uart_send(" done\n", 6);
+	uart_send(" done\n", 6);
 
-  uart_wait_tx_done();
+	uart_wait_tx_done();
 }
